@@ -7,7 +7,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.database.Cursor;
 import android.os.Bundle;
-import android.text.Html;
 import android.text.format.DateUtils;
 import android.util.Log;
 import android.view.View;
@@ -30,10 +29,7 @@ import com.example.xyzreader.data.ArticleLoader;
 import com.example.xyzreader.data.ItemsContract;
 import com.example.xyzreader.data.UpdaterService;
 
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.GregorianCalendar;
+
 
 /**
  * An activity representing a list of Articles. This activity has different presentations for
@@ -48,19 +44,13 @@ public class ArticleListActivity extends AppCompatActivity implements
     private Toolbar mToolbar;
     private SwipeRefreshLayout mSwipeRefreshLayout;
     private RecyclerView mRecyclerView;
-
-    private SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.sss");
-    // Use default locale format
-    private SimpleDateFormat outputFormat = new SimpleDateFormat();
-    // Most time functions can only handle 1902 - 2037
-    private GregorianCalendar START_OF_EPOCH = new GregorianCalendar(2,1,1);
-
     private Adapter adapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_article_list);
+        setSwipeRefreshLayout();
 
         mToolbar = (Toolbar) findViewById(R.id.toolbar);
 
@@ -85,7 +75,19 @@ public class ArticleListActivity extends AppCompatActivity implements
         }
     }
 
-    private void refresh() {
+    private void setSwipeRefreshLayout() {
+        mSwipeRefreshLayout = findViewById(R.id.swipe_refresh_layout);
+        mSwipeRefreshLayout.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
+            @Override
+            public void onRefresh() {
+                refresh();
+                mSwipeRefreshLayout.setRefreshing(false);
+            }
+        });
+    }
+
+    private void refresh()
+    {
         startService(new Intent(this, UpdaterService.class));
     }
 
@@ -161,37 +163,17 @@ public class ArticleListActivity extends AppCompatActivity implements
             return vh;
         }
 
-        private Date parsePublishedDate() {
-            try {
-                String date = mCursor.getString(ArticleLoader.Query.PUBLISHED_DATE);
-                return dateFormat.parse(date);
-            } catch (ParseException ex) {
-                Log.e(TAG, ex.getMessage());
-                Log.i(TAG, "passing today's date");
-                return new Date();
-            }
-        }
-
         @Override
         public void onBindViewHolder(ViewHolder holder, int position) {
             mCursor.moveToPosition(position);
             holder.titleView.setText(mCursor.getString(ArticleLoader.Query.TITLE));
-            Date publishedDate = parsePublishedDate();
-            if (!publishedDate.before(START_OF_EPOCH.getTime())) {
-
-                holder.subtitleView.setText(Html.fromHtml(
-                        DateUtils.getRelativeTimeSpanString(
-                                publishedDate.getTime(),
-                                System.currentTimeMillis(), DateUtils.HOUR_IN_MILLIS,
-                                DateUtils.FORMAT_ABBREV_ALL).toString()
-                                + "<br/>" + " by "
-                                + mCursor.getString(ArticleLoader.Query.AUTHOR)));
-            } else {
-                holder.subtitleView.setText(Html.fromHtml(
-                        outputFormat.format(publishedDate)
-                        + "<br/>" + " by "
-                        + mCursor.getString(ArticleLoader.Query.AUTHOR)));
-            }
+            holder.subtitleView.setText(
+                    DateUtils.getRelativeTimeSpanString(
+                            mCursor.getLong(ArticleLoader.Query.PUBLISHED_DATE),
+                            System.currentTimeMillis(), DateUtils.HOUR_IN_MILLIS,
+                            DateUtils.FORMAT_ABBREV_ALL).toString()
+                            + " by "
+                            + mCursor.getString(ArticleLoader.Query.AUTHOR));
             holder.thumbnailView.setImageUrl(
                     mCursor.getString(ArticleLoader.Query.THUMB_URL),
                     ImageLoaderHelper.getInstance(ArticleListActivity.this).getImageLoader());
@@ -245,7 +227,7 @@ public class ArticleListActivity extends AppCompatActivity implements
 
         @Override
         public int getNewListSize() {
-            return newCursor == null? 0 : newCursor.getCount();
+            return newCursor == null ? 0 : newCursor.getCount();
         }
 
         @Override
@@ -264,6 +246,7 @@ public class ArticleListActivity extends AppCompatActivity implements
             moveCursorsToPosition(oldItemPosition, newItemPosition);
             return getChangePayload(newCursor, oldCursor);
         }
+
         @Nullable
         public Object getChangePayload(C newCursor, C oldCursor) {
             return null;
@@ -274,8 +257,10 @@ public class ArticleListActivity extends AppCompatActivity implements
             boolean oldMoved = oldCursor.moveToPosition(oldItemPosition);
             return newMoved && oldMoved;
         }
-        /** Cursors are already moved to positions where you should obtain data by row.
-         *  Checks if contents at row are same
+
+        /**
+         * Cursors are already moved to positions where you should obtain data by row.
+         * Checks if contents at row are same
          *
          * @param oldCursor Old cursor object
          * @param newCursor New cursor object
@@ -283,8 +268,10 @@ public class ArticleListActivity extends AppCompatActivity implements
          */
         public abstract boolean areRowContentsTheSame(Cursor oldCursor, Cursor newCursor);
 
-        /** Cursors are already moved to positions where you should obtain data from row
-         *  Checks if rows are the same, ideally, check by unique id
+        /**
+         * Cursors are already moved to positions where you should obtain data from row
+         * Checks if rows are the same, ideally, check by unique id
+         *
          * @param oldCursor Old cursor object
          * @param newCursor New cursor object
          * @return See DiffUtil
